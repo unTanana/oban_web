@@ -59,7 +59,7 @@ defmodule Oban.Web.JobLogsTest do
   test "infers repo from Oban config and pubsub from the dashboard socket" do
     Application.delete_env(:oban_web, JobLogs)
 
-    socket = %{assigns: %{conf: %{repo: Oban.Web.SQLiteRepo}}, endpoint: Endpoint}
+    socket = %{assigns: %{conf: %{repo: Oban.Web.SQLiteRepo, prefix: false}}, endpoint: Endpoint}
 
     JobLogs.subscribe(%{id: 234}, socket)
 
@@ -93,7 +93,7 @@ defmodule Oban.Web.JobLogsTest do
     Oban.Web.JobLogs.Telemetry.handle_event(
       [:oban, :job, :start],
       %{},
-      %{job: job, conf: %{repo: Oban.Web.SQLiteRepo}},
+      %{job: job, conf: %{repo: Oban.Web.SQLiteRepo, prefix: false}},
       []
     )
 

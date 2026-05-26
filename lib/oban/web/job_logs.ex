@@ -195,7 +195,7 @@ defmodule Oban.Web.JobLogs do
   defp repo_opts do
     config()
     |> Keyword.take([:prefix])
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+    |> Enum.reject(fn {_key, value} -> empty_option?(value) end)
   end
 
   defp broadcast(%LogEntry{} = entry) do
@@ -246,7 +246,7 @@ defmodule Oban.Web.JobLogs do
   defp put_runtime_config(config) do
     config =
       config
-      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+      |> Enum.reject(fn {_key, value} -> empty_option?(value) end)
 
     current = :persistent_term.get(@runtime_config_key, [])
 
@@ -255,6 +255,8 @@ defmodule Oban.Web.JobLogs do
     :ok
   end
 
-  defp maybe_put(config, _key, nil), do: config
+  defp maybe_put(config, _key, value) when value in [nil, false], do: config
   defp maybe_put(config, key, value), do: Keyword.put(config, key, value)
+
+  defp empty_option?(value), do: value in [nil, false]
 end
