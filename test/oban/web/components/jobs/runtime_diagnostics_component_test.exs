@@ -81,6 +81,23 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
     assert html =~ "OCR retry recovered"
   end
 
+  test "renders an orphaned label for executing jobs without a live process" do
+    job =
+      insert_job!(%{},
+        conf: %{repo: Oban.Web.SQLiteRepo},
+        state: "executing",
+        attempt: 2,
+        max_attempts: 6
+      )
+
+    html =
+      render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-#{job.id}", job: job)
+
+    assert html =~ "Orphaned"
+    assert html =~ "No live worker process"
+    refute html =~ "Process Info"
+  end
+
   test "renders the latest job error when present" do
     job =
       insert_job!(%{},

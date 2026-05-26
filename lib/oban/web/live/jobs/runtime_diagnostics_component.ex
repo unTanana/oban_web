@@ -34,7 +34,7 @@ defmodule Oban.Web.Jobs.RuntimeDiagnosticsComponent do
       <div class="flex items-center justify-between px-2 py-1.5">
         <div class="flex items-center space-x-2 text-gray-600 dark:text-gray-300">
           <span class="font-semibold">Runtime</span>
-          <span class={status_badge_class(@runtime)}>
+          <span class={status_badge_class(@job, @runtime)}>
             {runtime_label(@job, @runtime)}
           </span>
         </div>
@@ -85,7 +85,7 @@ defmodule Oban.Web.Jobs.RuntimeDiagnosticsComponent do
             </div>
           <% else %>
             <span class="text-sm text-gray-400 dark:text-gray-500">
-              No runtime activity captured yet.
+              {last_activity_empty_label(@job)}
             </span>
           <% end %>
         </div>
@@ -166,15 +166,25 @@ defmodule Oban.Web.Jobs.RuntimeDiagnosticsComponent do
   defp stacktrace(_runtime), do: []
 
   defp runtime_label(_job, %{}), do: "Running"
+  defp runtime_label(%{state: "executing"}, _runtime), do: "Orphaned"
   defp runtime_label(job, _runtime), do: format_state(job.state)
 
-  defp status_badge_class(%{}) do
+  defp status_badge_class(_job, %{}) do
     "inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
   end
 
-  defp status_badge_class(_runtime) do
+  defp status_badge_class(%{state: "executing"}, _runtime) do
+    "inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
+  end
+
+  defp status_badge_class(_job, _runtime) do
     "inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
   end
+
+  defp last_activity_empty_label(%{state: "executing"}),
+    do: "No live worker process is registered."
+
+  defp last_activity_empty_label(_job), do: "No runtime activity captured yet."
 
   defp format_state(nil), do: "Unknown"
   defp format_state(state) when is_binary(state), do: String.capitalize(state)
