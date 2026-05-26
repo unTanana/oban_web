@@ -18,7 +18,6 @@ defmodule Mix.Tasks.ObanWeb.JobLogs.Install.Docs do
 
     * Adds `config :oban_web, Oban.Web.JobLogs`
     * Disables the collector in `test.exs`
-    * Adds `{Oban.Web.JobLogs, []}` to the application supervision tree
     * Generates a migration that delegates to `Oban.Web.JobLogs.Migration`
 
     ## Example
@@ -67,7 +66,6 @@ if Code.ensure_loaded?(Igniter) do
           igniter
           |> configure_job_logs(repo, pubsub, prefix)
           |> configure_test()
-          |> add_supervisor_child(repo)
           |> Igniter.Libs.Ecto.gen_migration(
             repo,
             "create_oban_job_logs",
@@ -138,32 +136,6 @@ if Code.ensure_loaded?(Igniter) do
         [Oban.Web.JobLogs],
         {:code, [enabled: false]}
       )
-    end
-
-    defp add_supervisor_child(igniter, repo) do
-      {igniter, present?} = job_logs_child_present?(igniter)
-
-      if present? do
-        igniter
-      else
-        Igniter.Project.Application.add_new_child(
-          igniter,
-          {Oban.Web.JobLogs, []},
-          after: [repo]
-        )
-      end
-    end
-
-    defp job_logs_child_present?(igniter) do
-      with app when is_atom(app) <- Igniter.Project.Application.app_module(igniter),
-           path <- Igniter.Project.Module.proper_location(igniter, app),
-           igniter <- Igniter.include_existing_file(igniter, path),
-           %{from: _from} = source <- Map.get(igniter.rewrite.sources, path),
-           content when is_binary(content) <- Rewrite.Source.get(source, :content) do
-        {igniter, String.contains?(content, "Oban.Web.JobLogs")}
-      else
-        _ -> {igniter, false}
-      end
     end
 
     defp migration_body(nil) do

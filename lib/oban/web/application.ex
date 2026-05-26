@@ -5,7 +5,10 @@ defmodule Oban.Web.Application do
 
   @impl Application
   def start(_type, _args) do
-    children = [Oban.Web.Cache]
+    children = [
+      Oban.Web.Cache,
+      Oban.Web.JobLogs
+    ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: __MODULE__)
   end
