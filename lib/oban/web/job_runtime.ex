@@ -81,7 +81,7 @@ defmodule Oban.Web.JobRuntime do
   defp refresh_runtime(%__MODULE__{pid: pid} = runtime) do
     case Process.info(pid, @info_keys) do
       nil -> :gone
-      info -> {:ok, %{runtime | info: info}}
+      info -> {:ok, %{runtime | info: Map.new(info)}}
     end
   end
 
