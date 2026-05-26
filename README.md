@@ -79,22 +79,16 @@ installing and configuring Oban Web for your application.
 This fork includes an optional job logs panel on the job detail page. It captures Oban lifecycle
 telemetry and `Logger` events emitted while a job is running.
 
-Install the host app migration and config:
+Install the host app migration:
 
 ```bash
 mix oban_web.job_logs.install --repo MyApp.Repo
 mix ecto.migrate
 ```
 
-The generated migration delegates to `Oban.Web.JobLogs.Migration`, while the
-generated config looks like this:
-
-```elixir
-config :oban_web, Oban.Web.JobLogs,
-  repo: MyApp.Repo,
-  pubsub: MyApp.PubSub,
-  levels: [:debug, :info, :warning, :error]
-```
+The generated migration delegates to `Oban.Web.JobLogs.Migration`. At runtime,
+Oban Web infers the repo from Oban telemetry metadata and the PubSub server from
+the dashboard endpoint.
 
 ### Standalone Docker Image
 

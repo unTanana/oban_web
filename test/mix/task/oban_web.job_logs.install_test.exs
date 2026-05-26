@@ -3,31 +3,13 @@ defmodule Mix.Tasks.ObanWeb.JobLogs.InstallTest do
 
   import Igniter.Test
 
-  test "installation configures job logs and migration" do
+  test "installation creates job logs migration" do
     igniter =
       test_project(files: project_files())
       |> Igniter.compose_task("oban_web.job_logs.install")
 
-    assert_has_patch(igniter, "config/config.exs", """
-       1  1   |import Config
-       2  2   |
-          3 + |config :oban_web, Oban.Web.JobLogs,
-          4 + |  repo: Test.Repo,
-          5 + |  pubsub: Test.PubSub,
-          6 + |  levels: [:debug, :info, :notice, :warning, :error, :critical, :alert, :emergency]
-          7 + |
-       3  8   |config :test,
-          ...|
-    """)
-
-    assert_has_patch(igniter, "config/test.exs", """
-       1  1   |import Config
-       2  2   |
-          3 + |config :oban_web, Oban.Web.JobLogs, enabled: false
-       3  4   |config :test, dev_routes: true
-          ...|
-    """)
-
+    assert_unchanged(igniter, "config/config.exs")
+    assert_unchanged(igniter, "config/test.exs")
     assert_unchanged(igniter, "lib/test/application.ex")
 
     {path, content} = created_migration(igniter)
@@ -37,30 +19,15 @@ defmodule Mix.Tasks.ObanWeb.JobLogs.InstallTest do
     assert content =~ "def down, do: Oban.Web.JobLogs.Migration.down()"
   end
 
-  test "installation supports explicit pubsub and prefix" do
+  test "installation supports explicit prefix" do
     igniter =
       test_project(files: project_files())
       |> Igniter.compose_task("oban_web.job_logs.install", [
         "--repo",
         "Test.Repo",
-        "--pubsub",
-        "Test.CustomPubSub",
         "--prefix",
         "private"
       ])
-
-    assert_has_patch(igniter, "config/config.exs", """
-       1  1   |import Config
-       2  2   |
-          3 + |config :oban_web, Oban.Web.JobLogs,
-          4 + |  repo: Test.Repo,
-          5 + |  pubsub: Test.CustomPubSub,
-          6 + |  levels: [:debug, :info, :notice, :warning, :error, :critical, :alert, :emergency],
-          7 + |  prefix: "private"
-          8 + |
-       3  9   |config :test,
-          ...|
-    """)
 
     {_path, content} = created_migration(igniter)
 

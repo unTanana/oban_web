@@ -13,11 +13,9 @@ defmodule Mix.Tasks.ObanWeb.JobLogs.Install.Docs do
     """
     #{short_doc()}.
 
-    This task configures the host application to capture and display logs on
-    Oban Web job detail pages:
+    This task prepares the host application to store and display logs on Oban
+    Web job detail pages:
 
-    * Adds `config :oban_web, Oban.Web.JobLogs`
-    * Disables the collector in `test.exs`
     * Generates a migration that delegates to `Oban.Web.JobLogs.Migration`
 
     ## Example
@@ -28,8 +26,7 @@ defmodule Mix.Tasks.ObanWeb.JobLogs.Install.Docs do
 
     ## Options
 
-    * `--repo` or `-r` — Specify the Ecto repo used by Oban
-    * `--pubsub` — Specify the Phoenix PubSub server for live dashboard updates
+    * `--repo` or `-r` — Specify the Ecto repo to place the migration under
     * `--prefix` — Store job logs in an Ecto prefix/schema
     """
   end
@@ -42,14 +39,12 @@ if Code.ensure_loaded?(Igniter) do
 
     use Igniter.Mix.Task
 
-    @levels [:debug, :info, :notice, :warning, :error, :critical, :alert, :emergency]
-
     @impl Igniter.Mix.Task
     def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
         group: :oban,
         example: __MODULE__.Docs.example(),
-        schema: [repo: :string, pubsub: :string, prefix: :string],
+        schema: [repo: :string, prefix: :string],
         aliases: [r: :repo]
       }
     end
@@ -60,13 +55,10 @@ if Code.ensure_loaded?(Igniter) do
 
       case extract_repo(igniter, opts[:repo]) do
         {:ok, igniter, repo} ->
-          pubsub = parse_pubsub(igniter, opts[:pubsub])
           prefix = opts[:prefix]
 
-          igniter
-          |> configure_job_logs(repo, pubsub, prefix)
-          |> configure_test()
-          |> Igniter.Libs.Ecto.gen_migration(
+          Igniter.Libs.Ecto.gen_migration(
+            igniter,
             repo,
             "create_oban_job_logs",
             body: migration_body(prefix),
@@ -103,39 +95,6 @@ if Code.ensure_loaded?(Igniter) do
         {false, igniter} ->
           {:error, Igniter.add_issue(igniter, "Provided repo (#{inspect(repo)}) doesn't exist")}
       end
-    end
-
-    defp parse_pubsub(igniter, nil), do: Igniter.Project.Module.module_name(igniter, "PubSub")
-    defp parse_pubsub(_igniter, module), do: Igniter.Project.Module.parse(module)
-
-    defp configure_job_logs(igniter, repo, pubsub, nil) do
-      configure_job_logs(igniter, repo, pubsub, [])
-    end
-
-    defp configure_job_logs(igniter, repo, pubsub, prefix) when is_binary(prefix) do
-      configure_job_logs(igniter, repo, pubsub, prefix: prefix)
-    end
-
-    defp configure_job_logs(igniter, repo, pubsub, prefix_opts) do
-      config = [repo: repo, pubsub: pubsub, levels: @levels] ++ prefix_opts
-
-      Igniter.Project.Config.configure_new(
-        igniter,
-        "config.exs",
-        :oban_web,
-        [Oban.Web.JobLogs],
-        {:code, config}
-      )
-    end
-
-    defp configure_test(igniter) do
-      Igniter.Project.Config.configure_new(
-        igniter,
-        "test.exs",
-        :oban_web,
-        [Oban.Web.JobLogs],
-        {:code, [enabled: false]}
-      )
     end
 
     defp migration_body(nil) do

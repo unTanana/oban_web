@@ -3,8 +3,8 @@ defmodule Oban.Web.JobLogs do
   Stores and streams log lines associated with Oban jobs.
 
   Job logs are captured from Oban lifecycle telemetry and from `Logger` events
-  emitted while an Oban job is executing. Configure the repo and optional PubSub
-  server under `config :oban_web, Oban.Web.JobLogs`.
+  emitted while an Oban job is executing. The repo is inferred from Oban's
+  runtime config and the PubSub server is inferred from the dashboard endpoint.
   """
 
   use GenServer
@@ -14,6 +14,8 @@ defmodule Oban.Web.JobLogs do
   alias Oban.Web.JobLogs.LogEntry
 
   @handler_id Oban.Web.JobLogs.LoggerHandler
+  @runtime_config_key {__MODULE__, :runtime_config}
+  @levels [:debug, :info, :notice, :warning, :error, :critical, :alert, :emergency]
 
   def start_link(opts) do
     if enabled?() do
@@ -55,6 +57,8 @@ defmodule Oban.Web.JobLogs do
   def topic(job_id) when is_integer(job_id), do: "oban_web_job_logs:#{job_id}"
 
   def subscribe(%{id: job_id}, socket) when is_integer(job_id) do
+    configure_from_socket(socket)
+
     if pubsub = pubsub() do
       Phoenix.PubSub.subscribe(pubsub, topic(job_id))
     end
@@ -63,6 +67,8 @@ defmodule Oban.Web.JobLogs do
   end
 
   def unsubscribe(%{id: job_id}, socket) when is_integer(job_id) do
+    configure_from_socket(socket)
+
     if pubsub = pubsub() do
       Phoenix.PubSub.unsubscribe(pubsub, topic(job_id))
     end
@@ -75,24 +81,34 @@ defmodule Oban.Web.JobLogs do
   def list(job_id, opts \\ []) when is_integer(job_id) do
     limit = Keyword.get(opts, :limit, 500)
 
-    LogEntry
-    |> where([entry], entry.job_id == ^job_id)
-    |> order_by([entry], asc: entry.logged_at, asc: entry.id)
-    |> limit(^limit)
-    |> repo().all(repo_opts())
+    if repo = repo() do
+      LogEntry
+      |> where([entry], entry.job_id == ^job_id)
+      |> order_by([entry], asc: entry.logged_at, asc: entry.id)
+      |> limit(^limit)
+      |> repo.all(repo_opts())
+    else
+      []
+    end
+  rescue
+    _error -> []
   end
 
   def record(attrs) when is_map(attrs) do
-    %LogEntry{}
-    |> LogEntry.changeset(attrs)
-    |> repo().insert(repo_opts())
-    |> case do
-      {:ok, entry} ->
-        broadcast(entry)
-        {:ok, entry}
+    if repo = repo() do
+      %LogEntry{}
+      |> LogEntry.changeset(attrs)
+      |> repo.insert(repo_opts())
+      |> case do
+        {:ok, entry} ->
+          broadcast(entry)
+          {:ok, entry}
 
-      {:error, changeset} ->
-        {:error, changeset}
+        {:error, changeset} ->
+          {:error, changeset}
+      end
+    else
+      {:error, :not_configured}
     end
   end
 
@@ -123,12 +139,12 @@ defmodule Oban.Web.JobLogs do
 
   def configured_levels do
     config()
-    |> Keyword.get(:levels, [:info, :notice, :warning, :error, :critical, :alert, :emergency])
+    |> Keyword.get(:levels, @levels)
     |> MapSet.new()
   end
 
   def repo do
-    Keyword.fetch!(config(), :repo)
+    Keyword.get(config(), :repo)
   end
 
   def pubsub do
@@ -136,17 +152,50 @@ defmodule Oban.Web.JobLogs do
   end
 
   def config do
-    Application.get_env(:oban_web, __MODULE__, [])
+    inferred = :persistent_term.get(@runtime_config_key, [])
+    configured = Application.get_env(:oban_web, __MODULE__, [])
+
+    Keyword.merge(inferred, configured)
   end
 
   def enabled? do
-    config = config()
+    Keyword.get(config(), :enabled, true)
+  end
 
-    Keyword.get(config, :enabled, Keyword.has_key?(config, :repo))
+  def configure_from_oban_conf(%{repo: repo} = conf) when is_atom(repo) do
+    config =
+      [repo: repo]
+      |> maybe_put(:prefix, Map.get(conf, :prefix))
+
+    put_runtime_config(config)
+  end
+
+  def configure_from_oban_conf(_conf), do: :ok
+
+  def configure_from_socket(%{assigns: assigns} = socket) when is_map(assigns) do
+    assigns
+    |> Map.get(:conf)
+    |> configure_from_oban_conf()
+
+    if pubsub = endpoint_pubsub(socket) do
+      put_runtime_config(pubsub: pubsub)
+    else
+      :ok
+    end
+  end
+
+  def configure_from_socket(_socket), do: :ok
+
+  def clear_runtime_config do
+    :persistent_term.erase(@runtime_config_key)
+
+    :ok
   end
 
   defp repo_opts do
-    Keyword.take(config(), [:prefix])
+    config()
+    |> Keyword.take([:prefix])
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
   end
 
   defp broadcast(%LogEntry{} = entry) do
@@ -181,4 +230,31 @@ defmodule Oban.Web.JobLogs do
   defp format_reason(nil), do: "unknown reason"
   defp format_reason(%_{} = exception), do: Exception.message(exception)
   defp format_reason(reason), do: inspect(reason)
+
+  defp endpoint_pubsub(%{endpoint: endpoint}) when is_atom(endpoint) do
+    cond do
+      function_exported?(endpoint, :config, 2) -> endpoint.config(:pubsub_server, nil)
+      function_exported?(endpoint, :config, 1) -> endpoint.config(:pubsub_server)
+      true -> nil
+    end
+  rescue
+    _error -> nil
+  end
+
+  defp endpoint_pubsub(_socket), do: nil
+
+  defp put_runtime_config(config) do
+    config =
+      config
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+
+    current = :persistent_term.get(@runtime_config_key, [])
+
+    :persistent_term.put(@runtime_config_key, Keyword.merge(current, config))
+
+    :ok
+  end
+
+  defp maybe_put(config, _key, nil), do: config
+  defp maybe_put(config, key, value), do: Keyword.put(config, key, value)
 end

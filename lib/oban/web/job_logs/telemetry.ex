@@ -21,7 +21,14 @@ defmodule Oban.Web.JobLogs.Telemetry do
     :telemetry.detach(@handler_id)
   end
 
-  def handle_event([:oban, :job, :start], _measurements, %{job: %Oban.Job{} = job}, _config) do
+  def handle_event(
+        [:oban, :job, :start],
+        _measurements,
+        %{job: %Oban.Job{} = job} = meta,
+        _config
+      ) do
+    configure_job_logs(meta)
+
     Logger.metadata(
       oban_job_id: job.id,
       oban_queue: job.queue,
@@ -34,6 +41,7 @@ defmodule Oban.Web.JobLogs.Telemetry do
   end
 
   def handle_event([:oban, :job, :stop], _measurements, %{job: %Oban.Job{} = job} = meta, _config) do
+    configure_job_logs(meta)
     record_lifecycle(:stop, job, meta)
   end
 
@@ -43,7 +51,14 @@ defmodule Oban.Web.JobLogs.Telemetry do
         %{job: %Oban.Job{} = job} = meta,
         _config
       ) do
+    configure_job_logs(meta)
     record_lifecycle(:exception, job, meta)
+  end
+
+  defp configure_job_logs(meta) do
+    meta
+    |> Map.get(:conf)
+    |> Oban.Web.JobLogs.configure_from_oban_conf()
   end
 
   defp record_lifecycle(event, job, meta \\ %{}) do
