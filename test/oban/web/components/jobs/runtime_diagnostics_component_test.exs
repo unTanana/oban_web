@@ -34,11 +34,18 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
   end
 
   test "renders live process diagnostics for an executing job" do
-    job = %Oban.Job{id: 123, state: "executing", attempt: 1, max_attempts: 3, errors: []}
+    job =
+      insert_job!(%{},
+        conf: %{repo: Oban.Web.SQLiteRepo},
+        state: "executing",
+        attempt: 1,
+        max_attempts: 3
+      )
 
     JobRuntime.register(job, self())
 
-    html = render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-123", job: job)
+    html =
+      render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-#{job.id}", job: job)
 
     assert html =~ "Runtime"
     assert html =~ "Running"
@@ -48,7 +55,13 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
   end
 
   test "renders persisted execution summary for a completed job" do
-    job = %Oban.Job{id: 456, state: "completed", attempt: 2, max_attempts: 6, errors: []}
+    job =
+      insert_job!(%{},
+        conf: %{repo: Oban.Web.SQLiteRepo},
+        state: "completed",
+        attempt: 2,
+        max_attempts: 6
+      )
 
     {:ok, _entry} =
       JobLogs.record(%{
@@ -59,7 +72,8 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
         logger_metadata: %{}
       })
 
-    html = render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-456", job: job)
+    html =
+      render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-#{job.id}", job: job)
 
     assert html =~ "Completed"
     assert html =~ "Log Entries"
@@ -68,15 +82,17 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
   end
 
   test "renders the latest job error when present" do
-    job = %Oban.Job{
-      id: 789,
-      state: "discarded",
-      attempt: 6,
-      max_attempts: 6,
-      errors: [%{"error" => "OCR failed: database busy"}]
-    }
+    job =
+      insert_job!(%{},
+        conf: %{repo: Oban.Web.SQLiteRepo},
+        state: "discarded",
+        attempt: 6,
+        max_attempts: 6,
+        errors: [%{"error" => "OCR failed: database busy"}]
+      )
 
-    html = render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-789", job: job)
+    html =
+      render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-#{job.id}", job: job)
 
     assert html =~ "Discarded"
     assert html =~ "Latest Error"

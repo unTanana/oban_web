@@ -27,7 +27,7 @@ defmodule Oban.Web.Components.Jobs.JobLogsComponentTest do
   end
 
   test "renders captured logs for the current job" do
-    job = %Oban.Job{id: 123}
+    job = insert_job!(%{}, conf: %{repo: Oban.Web.SQLiteRepo})
 
     {:ok, _entry} =
       JobLogs.record(%{
@@ -46,7 +46,9 @@ defmodule Oban.Web.Components.Jobs.JobLogsComponentTest do
   end
 
   test "renders an empty state when no logs were captured" do
-    html = render_component(JobLogsComponent, id: "job-logs-456", job: %Oban.Job{id: 456})
+    job = insert_job!(%{}, conf: %{repo: Oban.Web.SQLiteRepo})
+
+    html = render_component(JobLogsComponent, id: "job-logs-#{job.id}", job: job)
 
     assert html =~ "No logs captured for this job."
   end

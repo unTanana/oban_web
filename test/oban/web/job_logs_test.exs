@@ -38,11 +38,13 @@ defmodule Oban.Web.JobLogsTest do
   end
 
   test "records and broadcasts job-scoped log entries" do
-    Phoenix.PubSub.subscribe(Oban.Web.JobLogsPubSub, JobLogs.topic(123))
+    job = insert_sqlite_job!()
+
+    Phoenix.PubSub.subscribe(Oban.Web.JobLogsPubSub, JobLogs.topic(job.id))
 
     assert {:ok, %LogEntry{} = entry} =
              JobLogs.record(%{
-               job_id: 123,
+               job_id: job.id,
                level: :info,
                source: :logger,
                message: "parsed first page",
@@ -51,7 +53,7 @@ defmodule Oban.Web.JobLogsTest do
 
     assert_receive {JobLogs, :entry, ^entry}
 
-    assert [stored] = JobLogs.list(123)
+    assert [stored] = JobLogs.list(job.id)
     assert stored.message == "parsed first page"
     assert stored.logger_metadata["worker"] == "MyApp.Worker"
   end
@@ -59,16 +61,17 @@ defmodule Oban.Web.JobLogsTest do
   test "infers repo from Oban config and pubsub from the dashboard socket" do
     Application.delete_env(:oban_web, JobLogs)
 
+    job = insert_sqlite_job!()
     socket = %{assigns: %{conf: %{repo: Oban.Web.SQLiteRepo, prefix: false}}, endpoint: Endpoint}
 
-    JobLogs.subscribe(%{id: 234}, socket)
+    JobLogs.subscribe(job, socket)
 
     assert JobLogs.repo() == Oban.Web.SQLiteRepo
     assert JobLogs.pubsub() == Oban.Web.JobLogsPubSub
 
     assert {:ok, %LogEntry{} = entry} =
              JobLogs.record(%{
-               job_id: 234,
+               job_id: job.id,
                level: :info,
                source: :logger,
                message: "runtime inferred",
@@ -82,13 +85,13 @@ defmodule Oban.Web.JobLogsTest do
     Logger.metadata([])
     Application.delete_env(:oban_web, JobLogs)
 
-    job = %Oban.Job{
-      id: 456,
-      queue: "documents",
-      worker: "MyApp.Worker",
-      attempt: 2,
-      max_attempts: 6
-    }
+    job =
+      insert_sqlite_job!(
+        queue: :documents,
+        worker: "MyApp.Worker",
+        attempt: 2,
+        max_attempts: 6
+      )
 
     Oban.Web.JobLogs.Telemetry.handle_event(
       [:oban, :job, :start],
@@ -97,23 +100,25 @@ defmodule Oban.Web.JobLogsTest do
       []
     )
 
-    assert Logger.metadata()[:oban_job_id] == 456
+    assert Logger.metadata()[:oban_job_id] == job.id
     assert Logger.metadata()[:oban_queue] == "documents"
     assert Logger.metadata()[:oban_worker] == "MyApp.Worker"
     assert Logger.metadata()[:oban_attempt] == 2
-    assert [%LogEntry{message: message}] = JobLogs.list(456)
+    assert [%LogEntry{message: message}] = JobLogs.list(job.id)
     assert message == "Oban job started MyApp.Worker attempt 2/6"
   end
 
   test "logger handler stores events that include oban job metadata" do
     ensure_job_logs_started()
-    Phoenix.PubSub.subscribe(Oban.Web.JobLogsPubSub, JobLogs.topic(789))
+    job = insert_sqlite_job!()
+
+    Phoenix.PubSub.subscribe(Oban.Web.JobLogsPubSub, JobLogs.topic(job.id))
 
     event = %{
       level: :warning,
       msg: {"slow OCR page ~p", [3]},
       meta: %{
-        oban_job_id: 789,
+        oban_job_id: job.id,
         oban_queue: "documents",
         oban_worker: "MyApp.Worker",
         document_run_id: 1036,
@@ -130,7 +135,7 @@ defmodule Oban.Web.JobLogsTest do
 
     assert_receive {JobLogs, :entry, %LogEntry{}}
 
-    assert [entry] = JobLogs.list(789)
+    assert [entry] = JobLogs.list(job.id)
     assert entry.level == :warning
     assert entry.source == :logger
     assert entry.message =~ "slow OCR page 3"
@@ -142,14 +147,16 @@ defmodule Oban.Web.JobLogsTest do
 
   test "logger handler ignores Ecto SQL debug noise from job processes" do
     ensure_job_logs_started()
-    Phoenix.PubSub.subscribe(Oban.Web.JobLogsPubSub, JobLogs.topic(791))
+    job = insert_sqlite_job!()
+
+    Phoenix.PubSub.subscribe(Oban.Web.JobLogsPubSub, JobLogs.topic(job.id))
 
     event = %{
       level: :debug,
       msg:
         {:string, "QUERY OK source=\"oban_job_logs\" db=0.4ms\nINSERT INTO \"oban_job_logs\" ..."},
       meta: %{
-        oban_job_id: 791,
+        oban_job_id: job.id,
         oban_queue: "documents",
         oban_worker: "MyApp.Worker",
         mfa: {Ecto.Adapters.SQL, :log, 5}
@@ -161,7 +168,26 @@ defmodule Oban.Web.JobLogsTest do
     assert :ok = JobLogs.LoggerHandler.log(event, %{formatter: formatter})
 
     refute_receive {JobLogs, :entry, %LogEntry{}}
-    assert [] = JobLogs.list(791)
+    assert [] = JobLogs.list(job.id)
+  end
+
+  test "deletes job logs when the owning job is deleted" do
+    job = insert_sqlite_job!()
+
+    assert {:ok, %LogEntry{}} =
+             JobLogs.record(%{
+               job_id: job.id,
+               level: :info,
+               source: :logger,
+               message: "will cascade",
+               logger_metadata: %{}
+             })
+
+    assert [_entry] = JobLogs.list(job.id)
+
+    Oban.Web.SQLiteRepo.delete!(job)
+
+    assert [] = JobLogs.list(job.id)
   end
 
   defp ensure_job_logs_started do
@@ -169,5 +195,11 @@ defmodule Oban.Web.JobLogsTest do
       nil -> start_supervised!(JobLogs)
       _pid -> :ok
     end
+  end
+
+  defp insert_sqlite_job!(opts \\ []) do
+    opts = Keyword.put(opts, :conf, %{repo: Oban.Web.SQLiteRepo})
+
+    insert_job!(%{}, opts)
   end
 end

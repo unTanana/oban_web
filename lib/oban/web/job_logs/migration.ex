@@ -12,7 +12,7 @@ defmodule Oban.Web.JobLogs.Migration do
 
   def up(opts \\ []) when is_list(opts) do
     create_if_not_exists table(:oban_job_logs, table_opts(opts)) do
-      add :job_id, :integer, null: false
+      add :job_id, references(:oban_jobs, reference_opts(opts)), null: false
       add :level, :text, null: false
       add :source, :text, null: false
       add :message, :text, null: false
@@ -32,4 +32,12 @@ defmodule Oban.Web.JobLogs.Migration do
 
   defp table_opts(opts), do: Keyword.take(opts, [:prefix])
   defp index_opts(opts), do: Keyword.take(opts, [:prefix])
+
+  defp reference_opts(opts) do
+    [type: :bigint, on_delete: :delete_all]
+    |> maybe_put(:prefix, Keyword.get(opts, :prefix))
+  end
+
+  defp maybe_put(opts, _key, nil), do: opts
+  defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
 end
