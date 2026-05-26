@@ -3,11 +3,9 @@ defmodule Oban.Web.Jobs.RuntimeDiagnosticsComponent do
 
   use Oban.Web, :live_component
 
-  @log_limit 500
-
   @impl Phoenix.LiveComponent
   def update(assigns, socket) do
-    entries = Oban.Web.JobLogs.list(assigns.job.id, limit: @log_limit)
+    entries = Map.get(assigns, :entries, [])
     runtime = runtime(assigns.job)
 
     {:ok,
@@ -166,7 +164,7 @@ defmodule Oban.Web.Jobs.RuntimeDiagnosticsComponent do
   defp stacktrace(_runtime), do: []
 
   defp runtime_label(_job, %{}), do: "Running"
-  defp runtime_label(%{state: "executing"}, _runtime), do: "Orphaned"
+  defp runtime_label(%{state: "executing"}, _runtime), do: "No local runtime"
   defp runtime_label(job, _runtime), do: format_state(job.state)
 
   defp status_badge_class(_job, %{}) do
@@ -182,7 +180,7 @@ defmodule Oban.Web.Jobs.RuntimeDiagnosticsComponent do
   end
 
   defp last_activity_empty_label(%{state: "executing"}),
-    do: "No live worker process is registered."
+    do: "No live worker process is registered on this node."
 
   defp last_activity_empty_label(_job), do: "No runtime activity captured yet."
 

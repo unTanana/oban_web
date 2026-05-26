@@ -3,16 +3,12 @@ defmodule Oban.Web.Jobs.JobLogsComponent do
 
   use Oban.Web, :live_component
 
-  @limit 500
-
   @impl Phoenix.LiveComponent
   def update(assigns, socket) do
-    entries = Oban.Web.JobLogs.list(assigns.job.id, limit: @limit)
-
     {:ok,
      socket
      |> assign(assigns)
-     |> assign(entries: entries)}
+     |> assign_new(:entries, fn -> [] end)}
   end
 
   @impl Phoenix.LiveComponent

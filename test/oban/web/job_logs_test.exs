@@ -58,6 +58,29 @@ defmodule Oban.Web.JobLogsTest do
     assert stored.logger_metadata["worker"] == "MyApp.Worker"
   end
 
+  test "list/2 keeps the newest limited entries in chronological order" do
+    job = insert_sqlite_job!()
+    base_time = ~U[2026-01-01 00:00:00.000000Z]
+
+    for index <- 1..501 do
+      assert {:ok, %LogEntry{}} =
+               JobLogs.record(%{
+                 job_id: job.id,
+                 level: :info,
+                 source: :logger,
+                 message: "progress #{index}",
+                 logger_metadata: %{},
+                 logged_at: DateTime.add(base_time, index, :second)
+               })
+    end
+
+    entries = JobLogs.list(job.id, limit: 500)
+
+    assert length(entries) == 500
+    assert hd(entries).message == "progress 2"
+    assert List.last(entries).message == "progress 501"
+  end
+
   test "infers repo from Oban config and pubsub from the dashboard socket" do
     Application.delete_env(:oban_web, JobLogs)
 
@@ -169,6 +192,24 @@ defmodule Oban.Web.JobLogsTest do
 
     refute_receive {JobLogs, :entry, %LogEntry{}}
     assert [] = JobLogs.list(job.id)
+  end
+
+  test "logger handler ignores non-job logs before reading configured levels" do
+    previous = Application.get_env(:oban_web, JobLogs)
+    Application.put_env(:oban_web, JobLogs, levels: :invalid_levels)
+
+    on_exit(fn ->
+      if previous do
+        Application.put_env(:oban_web, JobLogs, previous)
+      else
+        Application.delete_env(:oban_web, JobLogs)
+      end
+    end)
+
+    event = %{level: :info, msg: {:string, "outside job"}, meta: %{}}
+    formatter = Logger.default_formatter(format: "$message", colors: [enabled: false])
+
+    assert :ok = JobLogs.LoggerHandler.log(event, %{formatter: formatter})
   end
 
   test "deletes job logs when the owning job is deleted" do

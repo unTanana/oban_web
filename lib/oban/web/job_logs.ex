@@ -84,9 +84,10 @@ defmodule Oban.Web.JobLogs do
     if repo = repo() do
       LogEntry
       |> where([entry], entry.job_id == ^job_id)
-      |> order_by([entry], asc: entry.logged_at, asc: entry.id)
+      |> order_by([entry], desc: entry.logged_at, desc: entry.id)
       |> limit(^limit)
       |> repo.all(repo_opts())
+      |> Enum.reverse()
     else
       []
     end

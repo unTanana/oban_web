@@ -20,9 +20,9 @@ defmodule Oban.Web.JobLogs.LoggerHandler do
 
   def log(%{meta: meta, level: level} = event, config) do
     with false <- Process.get(@skip_key, false),
+         job_id when is_integer(job_id) <- meta[:oban_job_id],
          false <- ignored_log?(level, meta),
-         true <- MapSet.member?(Oban.Web.JobLogs.configured_levels(), level),
-         job_id when is_integer(job_id) <- meta[:oban_job_id] do
+         true <- MapSet.member?(Oban.Web.JobLogs.configured_levels(), level) do
       capture(event, config, job_id, level, meta)
     else
       _ignored -> :ok

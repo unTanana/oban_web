@@ -1,109 +1,64 @@
 defmodule Mix.Tasks.ObanWeb.JobLogs.InstallTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
-  import Igniter.Test
+  import ExUnit.CaptureIO
 
-  test "installation creates job logs migration" do
-    igniter =
-      test_project(files: project_files())
-      |> Igniter.compose_task("oban_web.job_logs.install")
+  alias Mix.Tasks.ObanWeb.JobLogs.Install
 
-    assert_unchanged(igniter, "config/config.exs")
-    assert_unchanged(igniter, "config/test.exs")
-    assert_unchanged(igniter, "lib/test/application.ex")
-
-    {path, content} = created_migration(igniter)
-
-    assert path =~ ~r|priv/repo/migrations/\d{14}_create_oban_job_logs\.exs|
-    assert content =~ "def up, do: Oban.Web.JobLogs.Migration.up()"
-    assert content =~ "def down, do: Oban.Web.JobLogs.Migration.down()"
+  defmodule Repo do
+    def config do
+      [
+        otp_app: :oban_web,
+        priv: "priv/repo"
+      ]
+    end
   end
 
-  test "installation supports explicit prefix" do
-    igniter =
-      test_project(files: project_files())
-      |> Igniter.compose_task("oban_web.job_logs.install", [
-        "--repo",
-        "Test.Repo",
-        "--prefix",
-        "private"
-      ])
+  setup do
+    tmp = Path.join(System.tmp_dir!(), "oban-web-job-logs-install-#{System.unique_integer()}")
+    File.rm_rf!(tmp)
+    File.mkdir_p!(tmp)
 
-    {_path, content} = created_migration(igniter)
-
-    assert content =~ "def up, do: Oban.Web.JobLogs.Migration.up(prefix: \"private\")"
-    assert content =~ "def down, do: Oban.Web.JobLogs.Migration.down(prefix: \"private\")"
-  end
-
-  defp project_files do
-    %{
-      "config/config.exs" => """
-      import Config
-
-      config :test,
-        ecto_repos: [Test.Repo]
-      """,
-      "config/test.exs" => """
-      import Config
-
-      config :test, dev_routes: true
-      """,
-      "lib/test/repo.ex" => """
-      defmodule Test.Repo do
-        use Ecto.Repo,
-          otp_app: :test,
-          adapter: Ecto.Adapters.SQLite3
-      end
-      """,
-      "lib/test/application.ex" => """
-      defmodule Test.Application do
-        use Application
-
-        def start(_type, _args) do
-          children = [
-            Test.Repo,
-            {Phoenix.PubSub, name: Test.PubSub},
-            {Oban, Application.fetch_env!(:test, Oban)}
-          ]
-
-          Supervisor.start_link(children, strategy: :one_for_one)
-        end
-      end
-      """,
-      "mix.exs" => """
-      defmodule Test.MixProject do
-        use Mix.Project
-
-        def project do
-          [
-            app: :test,
-            version: "0.1.0",
-            elixir: "~> 1.17",
-            start_permanent: Mix.env() == :prod,
-            deps: deps()
-          ]
-        end
-
-        def application do
-          [
-            mod: {Test.Application, []},
-            extra_applications: [:logger]
-          ]
-        end
-
-        defp deps do
-          []
-        end
-      end
-      """
-    }
-  end
-
-  defp created_migration(igniter) do
-    igniter.rewrite.sources
-    |> Enum.find(fn {path, source} ->
-      source.from == :string and String.ends_with?(path, "_create_oban_job_logs.exs")
+    on_exit(fn ->
+      File.rm_rf!(tmp)
+      Mix.Task.reenable("oban_web.job_logs.install")
     end)
-    |> then(fn {path, source} -> {path, Rewrite.Source.get(source, :content)} end)
+
+    %{tmp: tmp}
+  end
+
+  test "installation creates job logs migration", %{tmp: tmp} do
+    File.cd!(tmp, fn ->
+      output =
+        capture_io(fn ->
+          Install.run(["--repo", inspect(Repo)])
+        end)
+
+      {path, content} = created_migration!()
+
+      assert output =~ "creating"
+      assert path =~ ~r|priv/repo/migrations/\d{14}_create_oban_job_logs\.exs|
+      assert content =~ "def up, do: Oban.Web.JobLogs.Migration.up()"
+      assert content =~ "def down, do: Oban.Web.JobLogs.Migration.down()"
+    end)
+  end
+
+  test "installation supports explicit prefix", %{tmp: tmp} do
+    File.cd!(tmp, fn ->
+      capture_io(fn ->
+        Install.run(["--repo", inspect(Repo), "--prefix", "private"])
+      end)
+
+      {_path, content} = created_migration!()
+
+      assert content =~ "def up, do: Oban.Web.JobLogs.Migration.up(prefix: \"private\")"
+      assert content =~ "def down, do: Oban.Web.JobLogs.Migration.down(prefix: \"private\")"
+    end)
+  end
+
+  defp created_migration! do
+    [path] = Path.wildcard("priv/repo/migrations/*_create_oban_job_logs.exs")
+
+    {path, File.read!(path)}
   end
 end

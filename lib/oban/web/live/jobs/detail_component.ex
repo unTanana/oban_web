@@ -27,6 +27,7 @@ defmodule Oban.Web.Jobs.DetailComponent do
       |> assign_new(:edit_changed?, fn -> false end)
       |> assign_new(:queues, fn -> [] end)
       |> assign_new(:diagnostics_open?, fn -> false end)
+      |> assign_new(:job_log_entries, fn -> [] end)
       |> assign_new(:job_logs_refresh_token, fn -> 0 end)
       |> assign_new(:form, fn -> form_from_job(assigns.job) end)
       |> then(fn socket ->
@@ -245,6 +246,7 @@ defmodule Oban.Web.Jobs.DetailComponent do
         id={"job-logs-#{@job.id}"}
         module={JobLogsComponent}
         job={@job}
+        entries={@job_log_entries}
         refresh_token={@job_logs_refresh_token}
       />
 
@@ -252,6 +254,7 @@ defmodule Oban.Web.Jobs.DetailComponent do
         id={"runtime-diagnostics-#{@job.id}"}
         module={RuntimeDiagnosticsComponent}
         job={@job}
+        entries={@job_log_entries}
       />
 
       <div class="px-3 py-6 border-t border-gray-200 dark:border-gray-700">

@@ -43,6 +43,15 @@ defmodule Oban.Web.Pages.Jobs.JobLogsTest do
     conf = Oban.Config.new(repo: Oban.Web.SQLiteRepo, engine: Oban.Engines.Lite)
     job = insert_job!(%{}, conf: conf, state: "completed", worker: __MODULE__.Worker)
 
+    {:ok, _entry} =
+      JobLogs.record(%{
+        job_id: job.id,
+        level: :info,
+        source: :logger,
+        message: "already captured",
+        logger_metadata: %{}
+      })
+
     socket = %Phoenix.LiveView.Socket{
       assigns: %{
         __changed__: %{},
@@ -59,5 +68,38 @@ defmodule Oban.Web.Pages.Jobs.JobLogsTest do
              Oban.Web.JobsPage.handle_params(%{"id" => to_string(job.id)}, "", socket)
 
     assert socket.assigns.detailed.id == job.id
+    assert [%LogEntry{message: "already captured"}] = socket.assigns.job_log_entries
+  end
+
+  test "job log notifications append current detail entries without a reload query" do
+    conf = Oban.Config.new(repo: Oban.Web.SQLiteRepo, engine: Oban.Engines.Lite)
+    job = insert_job!(%{}, conf: conf, state: "executing", worker: __MODULE__.Worker)
+
+    entry = %LogEntry{
+      id: 100,
+      job_id: job.id,
+      level: :info,
+      source: :logger,
+      message: "streamed progress",
+      logger_metadata: %{},
+      logged_at: DateTime.utc_now(:microsecond)
+    }
+
+    socket = %Phoenix.LiveView.Socket{
+      assigns: %{
+        __changed__: %{},
+        conf: conf,
+        default_params: %{limit: 20, sort_by: "time", sort_dir: "asc", state: "executing"},
+        detailed: job,
+        job_log_entries: [],
+        queues: [],
+        resolver: Oban.Web.Resolver,
+        states: []
+      }
+    }
+
+    assert {:noreply, socket} = Oban.Web.JobsPage.handle_info({JobLogs, :entry, entry}, socket)
+
+    assert socket.assigns.job_log_entries == [entry]
   end
 end

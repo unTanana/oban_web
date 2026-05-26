@@ -45,7 +45,11 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
     JobRuntime.register(job, self())
 
     html =
-      render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-#{job.id}", job: job)
+      render_component(RuntimeDiagnosticsComponent,
+        id: "runtime-diagnostics-#{job.id}",
+        job: job,
+        entries: []
+      )
 
     assert html =~ "Runtime"
     assert html =~ "Running"
@@ -73,7 +77,11 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
       })
 
     html =
-      render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-#{job.id}", job: job)
+      render_component(RuntimeDiagnosticsComponent,
+        id: "runtime-diagnostics-#{job.id}",
+        job: job,
+        entries: JobLogs.list(job.id)
+      )
 
     assert html =~ "Completed"
     assert html =~ "Log Entries"
@@ -81,7 +89,7 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
     assert html =~ "OCR retry recovered"
   end
 
-  test "renders an orphaned label for executing jobs without a live process" do
+  test "renders a local-runtime label for executing jobs without a local process" do
     job =
       insert_job!(%{},
         conf: %{repo: Oban.Web.SQLiteRepo},
@@ -91,10 +99,14 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
       )
 
     html =
-      render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-#{job.id}", job: job)
+      render_component(RuntimeDiagnosticsComponent,
+        id: "runtime-diagnostics-#{job.id}",
+        job: job,
+        entries: []
+      )
 
-    assert html =~ "Orphaned"
-    assert html =~ "No live worker process"
+    assert html =~ "No local runtime"
+    assert html =~ "No live worker process is registered on this node."
     refute html =~ "Process Info"
   end
 
@@ -109,7 +121,11 @@ defmodule Oban.Web.Components.Jobs.RuntimeDiagnosticsComponentTest do
       )
 
     html =
-      render_component(RuntimeDiagnosticsComponent, id: "runtime-diagnostics-#{job.id}", job: job)
+      render_component(RuntimeDiagnosticsComponent,
+        id: "runtime-diagnostics-#{job.id}",
+        job: job,
+        entries: []
+      )
 
     assert html =~ "Discarded"
     assert html =~ "Latest Error"

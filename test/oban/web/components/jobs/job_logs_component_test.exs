@@ -38,7 +38,12 @@ defmodule Oban.Web.Components.Jobs.JobLogsComponentTest do
         logger_metadata: %{}
       })
 
-    html = render_component(JobLogsComponent, id: "job-logs-123", job: job)
+    html =
+      render_component(JobLogsComponent,
+        id: "job-logs-123",
+        job: job,
+        entries: JobLogs.list(job.id)
+      )
 
     assert html =~ "Logs"
     assert html =~ "custom worker progress"
@@ -48,7 +53,12 @@ defmodule Oban.Web.Components.Jobs.JobLogsComponentTest do
   test "renders an empty state when no logs were captured" do
     job = insert_job!(%{}, conf: %{repo: Oban.Web.SQLiteRepo})
 
-    html = render_component(JobLogsComponent, id: "job-logs-#{job.id}", job: job)
+    html =
+      render_component(JobLogsComponent,
+        id: "job-logs-#{job.id}",
+        job: job,
+        entries: []
+      )
 
     assert html =~ "No logs captured for this job."
   end

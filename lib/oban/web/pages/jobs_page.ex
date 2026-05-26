@@ -19,6 +19,7 @@ defmodule Oban.Web.JobsPage do
   alias Oban.Web.Jobs.{ChartComponent, DetailComponent, NewComponent}
   alias Oban.Web.Jobs.{SidebarComponent, TableComponent}
 
+  @job_log_limit 500
   @known_params ~w(args ids limit meta nodes priorities queues sort_by sort_dir state tags workers)
   @ordered_states ~w(executing available scheduled suspended retryable cancelled discarded completed)
 
@@ -71,6 +72,7 @@ defmodule Oban.Web.JobsPage do
               history={@history}
               init_state={@init_state}
               job={@detailed}
+              job_log_entries={@job_log_entries}
               job_logs_refresh_token={@job_logs_refresh_token}
               module={DetailComponent}
               os_time={@os_time}
@@ -220,6 +222,7 @@ defmodule Oban.Web.JobsPage do
     |> assign_new(:diagnostics, fn -> nil end)
     |> assign_new(:diagnostics_at, fn -> nil end)
     |> assign_new(:history, fn -> [] end)
+    |> assign_new(:job_log_entries, fn -> [] end)
     |> assign_new(:job_logs_refresh_token, fn -> 0 end)
     |> assign_new(:jobs, fn -> [] end)
     |> assign_new(:nodes, fn -> [] end)
@@ -272,6 +275,7 @@ defmodule Oban.Web.JobsPage do
       diagnostics: diagnostics,
       diagnostics_at: diagnostics_at,
       history: history,
+      job_log_entries: load_job_logs(detailed),
       jobs: jobs,
       nodes: nodes(conf),
       os_time: System.os_time(:second),
@@ -289,6 +293,7 @@ defmodule Oban.Web.JobsPage do
      socket
      |> maybe_unsubscribe_job_logs(nil)
      |> assign(detailed: nil, show_new_form: true, page_title: page_title("New Job"))
+     |> assign(job_log_entries: [])
      |> assign(params: params)}
   end
 
@@ -312,6 +317,7 @@ defmodule Oban.Web.JobsPage do
          |> assign(detailed: job, show_new_form: false, page_title: page_title(job))
          |> assign(diagnostics: nil, diagnostics_at: nil)
          |> assign(history: history)
+         |> assign(job_log_entries: load_job_logs(job))
          |> assign(params: params)}
     end
   end
@@ -329,6 +335,7 @@ defmodule Oban.Web.JobsPage do
       |> assign(detailed: nil, show_new_form: false, page_title: page_title("Jobs"))
       |> assign(diagnostics: nil, diagnostics_at: nil)
       |> assign(history: [])
+      |> assign(job_log_entries: [])
       |> assign(params: params)
       |> assign(jobs: JobQuery.all_jobs(params, conf, resolver: resolver))
       |> assign(nodes: nodes(conf))
@@ -406,9 +413,12 @@ defmodule Oban.Web.JobsPage do
 
   # Job Logs
 
-  def handle_info({JobLogs, :entry, %{job_id: job_id}}, socket) do
+  def handle_info({JobLogs, :entry, %{job_id: job_id} = entry}, socket) do
     if socket.assigns.detailed && socket.assigns.detailed.id == job_id do
-      {:noreply, assign(socket, job_logs_refresh_token: System.unique_integer())}
+      {:noreply,
+       socket
+       |> assign(job_log_entries: append_job_log(socket.assigns.job_log_entries, entry))
+       |> assign(job_logs_refresh_token: System.unique_integer())}
     else
       {:noreply, socket}
     end
@@ -577,6 +587,18 @@ defmodule Oban.Web.JobsPage do
       {%{} = old_job, _new_job} -> JobLogs.unsubscribe(old_job, socket)
       _other -> socket
     end
+  end
+
+  defp load_job_logs(%{id: job_id}) when is_integer(job_id) do
+    JobLogs.list(job_id, limit: @job_log_limit)
+  end
+
+  defp load_job_logs(_job), do: []
+
+  defp append_job_log(entries, entry) do
+    entries
+    |> Kernel.++([entry])
+    |> Enum.take(-@job_log_limit)
   end
 
   # State Helpers
