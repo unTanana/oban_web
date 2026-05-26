@@ -76,6 +76,23 @@ defmodule Mix.Tasks.ObanWeb.JobLogs.InstallTest do
     assert content =~ "def down, do: Oban.Web.JobLogs.Migration.down(prefix: \"private\")"
   end
 
+  test "installation skips supervisor update when the child already exists" do
+    files =
+      update_in(project_files()["lib/test/application.ex"], fn application ->
+        String.replace(
+          application,
+          "{Oban, Application.fetch_env!(:test, Oban)}",
+          "{Oban.Web.JobLogs, []},\n      {Oban, Application.fetch_env!(:test, Oban)}"
+        )
+      end)
+
+    igniter =
+      test_project(files: files)
+      |> Igniter.compose_task("oban_web.job_logs.install")
+
+    assert igniter.warnings == []
+  end
+
   defp project_files do
     %{
       "config/config.exs" => """

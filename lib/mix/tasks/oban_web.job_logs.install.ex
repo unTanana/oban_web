@@ -141,7 +141,9 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp add_supervisor_child(igniter, repo) do
-      if job_logs_child_present?(igniter) do
+      {igniter, present?} = job_logs_child_present?(igniter)
+
+      if present? do
         igniter
       else
         Igniter.Project.Application.add_new_child(
@@ -155,11 +157,12 @@ if Code.ensure_loaded?(Igniter) do
     defp job_logs_child_present?(igniter) do
       with app when is_atom(app) <- Igniter.Project.Application.app_module(igniter),
            path <- Igniter.Project.Module.proper_location(igniter, app),
+           igniter <- Igniter.include_existing_file(igniter, path),
            %{from: _from} = source <- Map.get(igniter.rewrite.sources, path),
            content when is_binary(content) <- Rewrite.Source.get(source, :content) do
-        String.contains?(content, "Oban.Web.JobLogs")
+        {igniter, String.contains?(content, "Oban.Web.JobLogs")}
       else
-        _ -> false
+        _ -> {igniter, false}
       end
     end
 
