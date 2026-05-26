@@ -308,7 +308,7 @@ defmodule Oban.Web.JobsPage do
         {:noreply,
          socket
          |> maybe_unsubscribe_job_logs(job)
-         |> JobLogs.subscribe(job)
+         |> then(&JobLogs.subscribe(job, &1))
          |> assign(detailed: job, show_new_form: false, page_title: page_title(job))
          |> assign(diagnostics: nil, diagnostics_at: nil)
          |> assign(history: history)
