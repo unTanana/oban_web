@@ -7,6 +7,7 @@ defmodule Oban.Web.Application do
   def start(_type, _args) do
     children = [
       Oban.Web.Cache,
+      Oban.Web.JobRuntime,
       Oban.Web.JobLogs
     ]
 
