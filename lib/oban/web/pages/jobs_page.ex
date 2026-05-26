@@ -4,7 +4,18 @@ defmodule Oban.Web.JobsPage do
   use Oban.Web, :live_component
 
   alias Oban.Met
-  alias Oban.Web.{JobQuery, Metrics, Page, QueueQuery, SearchComponent, SortComponent, Telemetry}
+
+  alias Oban.Web.{
+    JobLogs,
+    JobQuery,
+    Metrics,
+    Page,
+    QueueQuery,
+    SearchComponent,
+    SortComponent,
+    Telemetry
+  }
+
   alias Oban.Web.Jobs.{ChartComponent, DetailComponent, NewComponent}
   alias Oban.Web.Jobs.{SidebarComponent, TableComponent}
 
@@ -60,6 +71,7 @@ defmodule Oban.Web.JobsPage do
               history={@history}
               init_state={@init_state}
               job={@detailed}
+              job_logs_refresh_token={@job_logs_refresh_token}
               module={DetailComponent}
               os_time={@os_time}
               params={without_defaults(Map.delete(@params, "id"), @default_params)}
@@ -208,6 +220,7 @@ defmodule Oban.Web.JobsPage do
     |> assign_new(:diagnostics, fn -> nil end)
     |> assign_new(:diagnostics_at, fn -> nil end)
     |> assign_new(:history, fn -> [] end)
+    |> assign_new(:job_logs_refresh_token, fn -> 0 end)
     |> assign_new(:jobs, fn -> [] end)
     |> assign_new(:nodes, fn -> [] end)
     |> assign_new(:os_time, fn -> System.os_time(:second) end)
@@ -274,6 +287,7 @@ defmodule Oban.Web.JobsPage do
 
     {:noreply,
      socket
+     |> maybe_unsubscribe_job_logs(nil)
      |> assign(detailed: nil, show_new_form: true, page_title: page_title("New Job"))
      |> assign(params: params)}
   end
@@ -293,6 +307,8 @@ defmodule Oban.Web.JobsPage do
 
         {:noreply,
          socket
+         |> maybe_unsubscribe_job_logs(job)
+         |> JobLogs.subscribe(job)
          |> assign(detailed: job, show_new_form: false, page_title: page_title(job))
          |> assign(diagnostics: nil, diagnostics_at: nil)
          |> assign(history: history)
@@ -309,6 +325,7 @@ defmodule Oban.Web.JobsPage do
 
     socket =
       socket
+      |> maybe_unsubscribe_job_logs(nil)
       |> assign(detailed: nil, show_new_form: false, page_title: page_title("Jobs"))
       |> assign(diagnostics: nil, diagnostics_at: nil)
       |> assign(history: [])
@@ -382,6 +399,16 @@ defmodule Oban.Web.JobsPage do
   def handle_info({:notification, :diagnostics_reply, %{"job_id" => job_id} = payload}, socket) do
     if socket.assigns.detailed && socket.assigns.detailed.id == job_id do
       {:noreply, assign(socket, diagnostics: payload, diagnostics_at: System.os_time(:second))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Job Logs
+
+  def handle_info({JobLogs, :entry, %{job_id: job_id}}, socket) do
+    if socket.assigns.detailed && socket.assigns.detailed.id == job_id do
+      {:noreply, assign(socket, job_logs_refresh_token: System.unique_integer())}
     else
       {:noreply, socket}
     end
@@ -542,6 +569,14 @@ defmodule Oban.Web.JobsPage do
     jobs = for job <- jobs, do: Map.put(job, :hidden?, MapSet.member?(selected, job.id))
 
     assign(socket, jobs: jobs, selected: MapSet.new())
+  end
+
+  defp maybe_unsubscribe_job_logs(socket, new_job) do
+    case {socket.assigns[:detailed], new_job} do
+      {%{id: job_id}, %{id: job_id}} -> socket
+      {%{} = old_job, _new_job} -> JobLogs.unsubscribe(old_job, socket)
+      _other -> socket
+    end
   end
 
   # State Helpers

@@ -74,6 +74,33 @@ fully realtime.
 See the [installation guide](https://hexdocs.pm/oban_web/installation.html) for details on
 installing and configuring Oban Web for your application.
 
+## Job Logs
+
+This fork includes an optional job logs panel on the job detail page. It captures Oban lifecycle
+telemetry and `Logger` events emitted while a job is running.
+
+Configure the host repo and optional PubSub server:
+
+```elixir
+config :oban_web, Oban.Web.JobLogs,
+  repo: MyApp.Repo,
+  pubsub: MyApp.PubSub,
+  levels: [:debug, :info, :warning, :error]
+```
+
+Start the collector after your repo and PubSub, before Oban:
+
+```elixir
+{Oban.Web.JobLogs, []}
+```
+
+Install and run the migration:
+
+```bash
+mix oban_web.job_logs.install --repo MyApp.Repo
+mix ecto.migrate
+```
+
 ### Standalone Docker Image
 
 A standalone Docker image is available for monitoring Oban without embedding the dashboard in your

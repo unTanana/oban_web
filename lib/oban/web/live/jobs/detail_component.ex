@@ -3,7 +3,7 @@ defmodule Oban.Web.Jobs.DetailComponent do
 
   import Oban.Web.FormComponents
 
-  alias Oban.Web.Jobs.{HistoryChartComponent, TimelineComponent}
+  alias Oban.Web.Jobs.{HistoryChartComponent, JobLogsComponent, TimelineComponent}
   alias Oban.Web.{Resolver, Timing}
 
   @impl Phoenix.LiveComponent
@@ -21,6 +21,7 @@ defmodule Oban.Web.Jobs.DetailComponent do
       |> assign_new(:edit_changed?, fn -> false end)
       |> assign_new(:queues, fn -> [] end)
       |> assign_new(:diagnostics_open?, fn -> false end)
+      |> assign_new(:job_logs_refresh_token, fn -> 0 end)
       |> assign_new(:form, fn -> form_from_job(assigns.job) end)
       |> then(fn socket ->
         if auto_open_diagnostics?, do: assign(socket, :diagnostics_open?, true), else: socket
@@ -232,6 +233,14 @@ defmodule Oban.Web.Jobs.DetailComponent do
       </div>
 
       <.job_data_section job={@job} resolver={@resolver} />
+
+      <.live_component
+        :if={Oban.Web.JobLogs.enabled?()}
+        id={"job-logs-#{@job.id}"}
+        module={JobLogsComponent}
+        job={@job}
+        refresh_token={@job_logs_refresh_token}
+      />
 
       <div class="px-3 py-6 border-t border-gray-200 dark:border-gray-700">
         <button
