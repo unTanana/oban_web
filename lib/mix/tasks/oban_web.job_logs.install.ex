@@ -141,11 +141,26 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp add_supervisor_child(igniter, repo) do
-      Igniter.Project.Application.add_new_child(
-        igniter,
-        {Oban.Web.JobLogs, []},
-        after: [repo]
-      )
+      if job_logs_child_present?(igniter) do
+        igniter
+      else
+        Igniter.Project.Application.add_new_child(
+          igniter,
+          {Oban.Web.JobLogs, []},
+          after: [repo]
+        )
+      end
+    end
+
+    defp job_logs_child_present?(igniter) do
+      with app when is_atom(app) <- Igniter.Project.Application.app_module(igniter),
+           path <- Igniter.Project.Module.proper_location(igniter, app),
+           %{from: _from} = source <- Map.get(igniter.rewrite.sources, path),
+           content when is_binary(content) <- Rewrite.Source.get(source, :content) do
+        String.contains?(content, "Oban.Web.JobLogs")
+      else
+        _ -> false
+      end
     end
 
     defp migration_body(nil) do
