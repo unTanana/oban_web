@@ -36,6 +36,32 @@ fully realtime.
   </picture>
 </p>
 
+## About This Fork
+
+This fork tracks upstream Oban Web `2.12.4` and adds job-scoped observability for applications
+where failed, slow, or long-running jobs need more context than the final Oban error alone.
+
+What is different from upstream:
+
+- **Job logs on the detail page** - Captures log lines into an `oban_job_logs` table and shows
+  them beside the job that emitted them.
+- **Lifecycle capture** - Records Oban `start`, `stop`, and `exception` telemetry events even when
+  the worker does not emit its own logs.
+- **Logger capture** - Stores `Logger` events emitted while an Oban job is running, keyed by the
+  job id added to logger metadata.
+- **Live streaming** - Pushes newly captured log lines into an open job detail view through the
+  dashboard PubSub.
+- **Runtime diagnostics** - Adds a runtime panel with log counts, latest activity, latest error,
+  and local BEAM process information for currently executing jobs.
+- **Install task** - Adds `mix oban_web.job_logs.install` to generate the host application
+  migration, including optional Ecto prefix support.
+
+Why use this fork:
+
+- Debug a job from Oban Web without searching external logs for the matching job id.
+- Watch progress from noisy or long-running workers while they are still executing.
+- Keep transient worker context, lifecycle events, and Oban job state together in one dashboard.
+
 ## Features
 
 - **🐦‍🔥 Embedded LiveView** - Mount the dashboard directly in your application without any
@@ -71,24 +97,76 @@ fully realtime.
 
 ## Installation
 
-See the [installation guide](https://hexdocs.pm/oban_web/installation.html) for details on
-installing and configuring Oban Web for your application.
+See the upstream [installation guide](https://hexdocs.pm/oban_web/installation.html) for the normal
+Oban Web dashboard setup.
+
+To use this fork, point your dependency at this branch instead of the Hex package:
+
+```elixir
+{:oban_web, git: "https://github.com/unTanana/oban_web.git", branch: "2.12.4-with-job-logs"}
+```
+
+Then run the normal dependency and dashboard setup for your application.
 
 ## Job Logs
 
 This fork includes an optional job logs panel on the job detail page. It captures Oban lifecycle
-telemetry and `Logger` events emitted while a job is running.
+telemetry and `Logger` events emitted while a job is running, keeps the latest 500 entries visible
+on the detail page, and deletes captured logs when the owning Oban job is deleted.
 
-Install the host app migration:
+Install the host application migration:
 
 ```bash
+mix deps.get
 mix oban_web.job_logs.install --repo MyApp.Repo
 mix ecto.migrate
 ```
 
-The generated migration delegates to `Oban.Web.JobLogs.Migration`. At runtime,
-Oban Web infers the repo from Oban telemetry metadata and the PubSub server from
-the dashboard endpoint.
+If your Oban tables live under an Ecto prefix, pass the same prefix:
+
+```bash
+mix oban_web.job_logs.install --repo MyApp.Repo --prefix private
+mix ecto.migrate
+```
+
+The generated migration delegates to `Oban.Web.JobLogs.Migration`, which creates the
+`oban_job_logs` table and indexes it by `job_id`.
+
+No additional runtime configuration is required for the common Phoenix setup. Oban Web starts the
+job-log capture process with the `:oban_web` application, infers the repo from Oban telemetry
+metadata, and infers the PubSub server from the dashboard endpoint.
+
+You can override the defaults when needed:
+
+```elixir
+config :oban_web, Oban.Web.JobLogs,
+  enabled: true,
+  levels: [:info, :warning, :error]
+```
+
+Set `enabled: false` to disable capture and hide the log panel. By default, all standard Elixir
+Logger levels are captured. If runtime inference is not available in your deployment, configure the
+repo and PubSub explicitly:
+
+```elixir
+config :oban_web, Oban.Web.JobLogs,
+  repo: MyApp.Repo,
+  pubsub: MyAppWeb.PubSub
+```
+
+Worker logs are captured automatically from the job process:
+
+```elixir
+def perform(%Oban.Job{} = job) do
+  Logger.info("import started")
+  Logger.info("processing account #{job.args["account_id"]}")
+
+  :ok
+end
+```
+
+If a worker starts extra processes that log independently, make sure those processes preserve or set
+the `oban_job_id` logger metadata; only log events with job metadata are associated with a job.
 
 ### Standalone Docker Image
 
